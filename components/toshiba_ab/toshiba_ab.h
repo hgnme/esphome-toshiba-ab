@@ -223,6 +223,7 @@ struct DataFrameReader {
         0x40, // remote
         0x41, // possible remote
         0x42, // temp sensor
+        0x83, // master as well
         // Add more if needed
     };
     // Ignore common noise byte at start
