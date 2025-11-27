@@ -663,6 +663,9 @@ void ToshibaAbClimate::sync_from_received_state() {
 }
 
 void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
+  ESP_LOGD(TAG, "hgn rx pkt:");
+  log_data_frame("hgn data:", frame);
+  
   if (frame->source == this->master_address_) {
       // status update
       ESP_LOGD(TAG, "Received data from master:");
