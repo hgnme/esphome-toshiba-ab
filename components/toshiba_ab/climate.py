@@ -83,7 +83,7 @@ CONFIG_SCHEMA = climate._CLIMATE_SCHEMA.extend(
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
         cv.Optional(CONF_VENT): cv.maybe_simple_value(
-            switch.SWITCH_SCHEMA.extend(
+            switch._SWITCH_SCHEMA.extend(
                 cv.Schema(
                     {
                         cv.GenerateID(): cv.declare_id(ToshibaAbVentSwitch),
