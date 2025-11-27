@@ -236,8 +236,8 @@ struct DataFrameReader {
             }
         }
         if (!valid) {
-            ESP_LOGV("READER", "Ignoring packet from unknown source: 0x%02X", byte);
-            return false;
+            ESP_LOGD("READER", "Ignoring packet from unknown source: 0x%02X", byte);
+            // return false;
         }
     }
     // Store byte
