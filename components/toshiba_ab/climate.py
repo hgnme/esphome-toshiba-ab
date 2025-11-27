@@ -72,7 +72,7 @@ REPORT_SENSOR_TEMP_SCHEMA = cv.Schema({
 })
 
 
-CONFIG_SCHEMA = climate.CLIMATE_SCHEMA.extend(
+CONFIG_SCHEMA = climate._CLIMATE_SCHEMA.extend(
     {
         cv.Optional(CONF_MASTER, default=0x00): cv.uint8_t,
         cv.Optional(CONF_MASTER_ADDRESS_AUTO, default=True): cv.boolean,
