@@ -662,10 +662,7 @@ void ToshibaAbClimate::sync_from_received_state() {
   }
 }
 
-void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
-  ESP_LOGD(TAG, "hgn rx pkt:");
-  log_data_frame("hgn data:", frame);
-  
+void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {  
   if (frame->source == this->master_address_) {
       // status update
       ESP_LOGD(TAG, "Received data from master:");
@@ -879,6 +876,8 @@ bool ToshibaAbClimate::receive_data(const std::vector<uint8_t> data) {
 }
 
 bool ToshibaAbClimate::receive_data_frame(const struct DataFrame *frame) {
+  log_data_frame("hgn rx frame:", frame);
+  // ESP_LOGD(TAG, "hgn rx pkt:");
   if (frame->crc() != frame->calculate_crc()) {
     ESP_LOGW(TAG, "CRC check failed");
     log_data_frame("Failed frame", frame);
