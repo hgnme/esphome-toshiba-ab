@@ -50,8 +50,8 @@ const uint8_t STATUS_DATA_VENT_MASK = 0b00000100;
 const uint8_t STATUS_DATA_VENT_SHIFT_BITS = 2;
 const uint8_t STATUS_DATA_TARGET_TEMP_BYTE = 6;
 
-const uint8_t COMMAND_MODE_READ = 0x08;
-const uint8_t COMMAND_MODE_WRITE = 0x80;
+const uint8_t COMMAND_MODE_READ = 0xD0;
+const uint8_t COMMAND_MODE_WRITE = 0x0D;
 
 const uint8_t COMMAND_SET_TEMP = 0b00001000;
 const uint8_t COMMAND_SET_FAN = 0b00010000;
