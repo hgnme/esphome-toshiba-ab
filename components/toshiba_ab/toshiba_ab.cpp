@@ -665,7 +665,7 @@ void ToshibaAbClimate::sync_from_received_state() {
 void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {  
   if (frame->source == this->master_address_) {
       // status update
-      ESP_LOGD(TAG, "Received data from master:");
+      ESP_LOGD(TAG, "[Master] RX Frame");
       last_master_alive_millis_ = millis();
       if (this->connected_binary_sensor_) {
         this->connected_binary_sensor_->publish_state(true);
@@ -673,15 +673,15 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
 
       switch (frame->opcode1) {
         case OPCODE_PING: {
-        log_data_frame("PING/ALIVE", frame);
-        break;
-        }
+          log_data_frame("  [Master] [Ping]", frame);
+          break;
+          }
         case OPCODE_ACK: {
-        // ACK (maps to 0xA1)
-        log_data_frame("ACK", frame);
-        if (last_unconfirmed_command_.has_value()) last_unconfirmed_command_.reset();
-        break;
-      }
+          // ACK (maps to 0xA1)
+          log_data_frame("  [Master] [Ack]", frame);
+          if (last_unconfirmed_command_.has_value()) last_unconfirmed_command_.reset();
+          break;
+        }
         case OPCODE_PARAMETER:
           // master reporting it's state
           // e.g. 01:52:11:04:80:86:A1:05:E4
@@ -691,7 +691,7 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
                             |- 0010 0100 -> mode bit7-bit5  bit4-bit0 ???
                               ---
           */
-          log_data_frame("MASTER PARAMETERS", frame);
+          log_data_frame("  [Master] [Parameters]", frame);
 
           tcc_state.power = (frame->data[3] & STATUS_DATA_POWER_MASK);
           tcc_state.mode =
@@ -700,7 +700,7 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
           tcc_state.heating = (frame->data[STATUS_DATA_MODEPOWER_BYTE] & 0b00000001);
           tcc_state.preheating = (frame->data[3] & 0b0100) >> 2;
 
-          ESP_LOGD(TAG, "Mode: %02X, Cooling: %d, Heating: %d, Preheating: %d", tcc_state.mode, tcc_state.cooling,
+          ESP_LOGD(TAG, "  Mode: %02X, Cooling: %d, Heating: %d, Preheating: %d", tcc_state.mode, tcc_state.cooling,
                    tcc_state.heating, tcc_state.preheating);
 
           sync_from_received_state();
@@ -710,7 +710,7 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
           // sync power, mode, fan and target temp from the unit to the climate
           // component
 
-          log_data_frame("STATUS", frame);
+          log_data_frame("  [Master] [Status]", frame);
 
           // this message means that the command sent to master was confirmed
           // (may be it can return an error, but no idea how to read that at the
@@ -732,7 +732,7 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
                   TEMPERATURE_CONVERSION_RATIO -
               TEMPERATURE_CONVERSION_OFFSET;
 
-          ESP_LOGD(TAG, "Power: %d, Mode: %02X, Fan: %02X, Vent: %02X, Target Temp: %.1f",
+          ESP_LOGD(TAG, "  Power: %d, Mode: %02X, Fan: %02X, Vent: %02X, Target Temp: %.1f",
                    tcc_state.power, tcc_state.mode, tcc_state.fan, tcc_state.vent, tcc_state.target_temp);
    
 
@@ -743,7 +743,7 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
           // sync power, mode, fan and target temp from the unit to the climate
           // component
 
-          log_data_frame("EXTENDED STATUS", frame);
+          log_data_frame("  [Master] [Status Extended]", frame);
 
           tcc_state.power = (frame->data[STATUS_DATA_MODEPOWER_BYTE] & STATUS_DATA_POWER_MASK);
           tcc_state.mode =
@@ -766,7 +766,7 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
 
           tcc_state.preheating  = (frame->data[STATUS_DATA_FLAGS_BYTE] & 0b00000010) >> 1;
           tcc_state.filter_alert = (frame->data[STATUS_DATA_FLAGS_BYTE] & 0b10000000) >> 7;
-          ESP_LOGD(TAG, "Power: %d, Mode: %02X, Fan: %02X, Vent: %02X, Target Temp: %.1f, Room Temp: %.1f, Preheating: %d, Filter Alert: %d",
+          ESP_LOGD(TAG, "  Power: %d, Mode: %02X, Fan: %02X, Vent: %02X, Target Temp: %.1f, Room Temp: %.1f, Preheating: %d, Filter Alert: %d",
                    tcc_state.power, tcc_state.mode, tcc_state.fan, tcc_state.vent, tcc_state.target_temp,
                    tcc_state.room_temp, tcc_state.preheating, tcc_state.filter_alert);
 
@@ -775,93 +775,92 @@ void ToshibaAbClimate::process_received_data(const struct DataFrame *frame) {
           break;
         case OPCODE_SENSOR_VALUE:
             // sensor value received from master
+          log_data_frame("  [Master] [SensorValue]", frame);
           this->process_sensor_value_(frame);
           break;
 
         default:
-          log_data_frame("MASTER", frame);
+          log_data_frame("  [Master] [???]", frame);
           break;
       }
-    }else {
-    if (frame->source == TOSHIBA_REMOTE) {
-      ESP_LOGD(TAG, "Received data from remote:");
-
-      // Remote temperature push: 40 00 55 05 08 81 01 6E 00 ..
-      if (frame->opcode1 == OPCODE_TEMPERATURE &&
-          frame->data_length >= 4 &&
-          frame->data[1] == 0x81) {
-        uint8_t raw = frame->data[3] & TEMPERATURE_DATA_MASK;  // raw[7]
-        float rmt = static_cast<float>(raw) / TEMPERATURE_CONVERSION_RATIO - TEMPERATURE_CONVERSION_OFFSET;
-
-        // tcc_state.room_temp = rmt; we don't update the state here, we wait for the next status update from master
-        log_data_frame("Remote temperature", frame);
-        ESP_LOGD(TAG, "Toshiba Wall Remote reports: %.1f °C", rmt);
-        // sync_from_received_state(); we don't update the state, we wait for the next status update from master
-        // remote temperature is sent regardless of DN32 setting, ac decides wether to use it or ignore it
+    } else {
+      if (frame->source == TOSHIBA_REMOTE) {
+        ESP_LOGD(TAG, "[Remote] RX Frame");
+  
+        // Remote temperature push: 40 00 55 05 08 81 01 6E 00 ..
+        if (frame->opcode1 == OPCODE_TEMPERATURE &&
+            frame->data_length >= 4 &&
+            frame->data[1] == 0x81) {
+          uint8_t raw = frame->data[3] & TEMPERATURE_DATA_MASK;  // raw[7]
+          float rmt = static_cast<float>(raw) / TEMPERATURE_CONVERSION_RATIO - TEMPERATURE_CONVERSION_OFFSET;
+  
+          // tcc_state.room_temp = rmt; we don't update the state here, we wait for the next status update from master
+          log_data_frame("  [Remote] [Temp]", frame);
+          ESP_LOGD(TAG, "  Temp: %.1f °C", rmt);
+          // sync_from_received_state(); we don't update the state, we wait for the next status update from master
+          // remote temperature is sent regardless of DN32 setting, ac decides wether to use it or ignore it
+          
+  
+        // Remote PING sent every 30s: 40 00 15 07 08 0C 81 00 00 48 00 ..
+        } else if (frame->opcode1 == OPCODE_ERROR_HISTORY &&      // 0x15 envelope
+                  frame->data_length >= 3 &&
+                  frame->data[0] == COMMAND_MODE_READ &&         // 0x08
+                  frame->data[1] == OPCODE2_PING_PONG &&         // 0x0C
+                  frame->data[2] == OPCODE2_READ_STATUS) {       // 0x81
+          log_data_frame("  [Remote] [Ping]", frame);
+          
+          // Auto-update master address if enabled and different from current
+          if (this->master_address_auto_ &&
+          frame->dest != this->master_address_) {
+            ESP_LOGI(TAG, "Remote ping addressed to new master: 0x%02X, updating master address", frame->dest);
+            this->master_address_ = frame->dest;
+          }
         
-
-      // Remote PING sent every 30s: 40 00 15 07 08 0C 81 00 00 48 00 ..
-      } else if (frame->opcode1 == OPCODE_ERROR_HISTORY &&      // 0x15 envelope
-                frame->data_length >= 3 &&
-                frame->data[0] == COMMAND_MODE_READ &&         // 0x08
-                frame->data[1] == OPCODE2_PING_PONG &&         // 0x0C
-                frame->data[2] == OPCODE2_READ_STATUS) {       // 0x81
-        log_data_frame("Remote PING", frame);
-        
-        // Auto-update master address if enabled and different from current
-        if (this->master_address_auto_ &&
-        frame->dest != this->master_address_) {
-          ESP_LOGI(TAG, "Remote ping addressed to new master: 0x%02X, updating master address", frame->dest);
-          this->master_address_ = frame->dest;
+        // Remote 40:00:15:06:08:E8:00:01:00:9E:2C that is sent every minute, not sure what it does
+        } else if (frame->opcode1 == OPCODE_ERROR_HISTORY &&      // 0x15 envelope
+                  frame->data_length >= 6 &&
+                  frame->data[0] == COMMAND_MODE_READ &&         // 0x08
+                  frame->data[1] == 0xE8 &&
+                  frame->data[3] == 0x01 &&                 
+                  frame->data[5] == 0x9E) {                       
+                  
+          log_data_frame("  [Remote] [E8???]", frame);
+  
+        } else {
+          log_data_frame("  [Remote] [???]", frame);
         }
       
-      // Remote 40:00:15:06:08:E8:00:01:00:9E:2C that is sent every minute, not sure what it does
-      } else if (frame->opcode1 == OPCODE_ERROR_HISTORY &&      // 0x15 envelope
-                frame->data_length >= 6 &&
-                frame->data[0] == COMMAND_MODE_READ &&         // 0x08
-                frame->data[1] == 0xE8 &&
-                frame->data[3] == 0x01 &&                 
-                frame->data[5] == 0x9E) {                       
-                
-        log_data_frame("Remote E8 Read", frame);
-
+      } else if (frame->source == TOSHIBA_TEMP_SENSOR) {
+        ESP_LOGD(TAG, "[Sensor] RX Frame");
+        // message from configured temp sensor in yaml
+        // example:   42:00:11:04:08:89:72:46:E2  for 22 degrees, this message follows Toshiba standalone temp sensor format
+        if (frame->opcode1 == OPCODE_PARAMETER &&
+            frame->data_length == 4 &&
+            frame->data[1] == 0x89) {
+  
+          std::string label = this->ext_temp_sensor_name_.empty()
+                      ? "  [Sensor] [YAML]"
+                      : this->ext_temp_sensor_name_;
+          log_data_frame(label, frame);
+          uint8_t raw = frame->data[2] & TEMPERATURE_DATA_MASK;  // raw[7]
+          float sensor_temp = static_cast<float>(raw) / TEMPERATURE_CONVERSION_RATIO - TEMPERATURE_CONVERSION_OFFSET;
+          ESP_LOGD(TAG, "  %s: %.1f °C", label.c_str(), sensor_temp);
+        } else {
+          log_data_frame("  [Sensor] [???]", frame);
+        }
       } else {
-        // unknown remote message
-        log_data_frame("Unknown remote data", frame);
-      }
-    
-    } else if (frame->source == TOSHIBA_TEMP_SENSOR) {
-      // message from configured temp sensor in yaml
-      // example:   42:00:11:04:08:89:72:46:E2  for 22 degrees, this message follows Toshiba standalone temp sensor format
-      if (frame->opcode1 == OPCODE_PARAMETER &&
-          frame->data_length == 4 &&
-          frame->data[1] == 0x89) {
-
-        std::string label = this->ext_temp_sensor_name_.empty()
-                    ? "Yaml temp sensor"
-                    : this->ext_temp_sensor_name_;
-        log_data_frame(label, frame);
-        uint8_t raw = frame->data[2] & TEMPERATURE_DATA_MASK;  // raw[7]
-        float sensor_temp = static_cast<float>(raw) / TEMPERATURE_CONVERSION_RATIO - TEMPERATURE_CONVERSION_OFFSET;
-        ESP_LOGD(TAG, "%s: %.1f °C", label.c_str(), sensor_temp);
-      } else {
-        log_data_frame("Unknown 0x42 data", frame);
-      }
-    } else {
-    // Unknown source handling
-    ESP_LOGD(TAG, "Received data from unknown source: %02X", frame->source);
-    log_data_frame("Unknown source", frame);
-
-    // Auto-detect master address from master parameters frame
-      if (this->master_address_auto_) {
-      // Check for master parameters pattern (opcode, length, etc.)
-        if (frame->opcode1 == OPCODE_PARAMETER && frame->data_length >= 4) {
-          ESP_LOGI(TAG, "Auto-detected master address: 0x%02X, updating master address", frame->source);
-          this->master_address_ = frame->source;
-
+      // Unknown source handling
+      log_data_frame("[???] RX Frame", frame);  
+      // Auto-detect master address from master parameters frame
+        if (this->master_address_auto_) {
+        // Check for master parameters pattern (opcode, length, etc.)
+          if (frame->opcode1 == OPCODE_PARAMETER && frame->data_length >= 4) {
+            ESP_LOGI(TAG, "Auto-detected master address: 0x%02X, updating master address", frame->source);
+            this->master_address_ = frame->source;
+  
+          }
         }
       }
-    }
     } 
   }
 
@@ -876,7 +875,7 @@ bool ToshibaAbClimate::receive_data(const std::vector<uint8_t> data) {
 }
 
 bool ToshibaAbClimate::receive_data_frame(const struct DataFrame *frame) {
-  log_data_frame("hgn rx frame:", frame);
+  // log_data_frame("hgn rx frame:", frame);
   // ESP_LOGD(TAG, "hgn rx pkt:");
   if (frame->crc() != frame->calculate_crc()) {
     ESP_LOGW(TAG, "CRC check failed");
